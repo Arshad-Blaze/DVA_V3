@@ -1,0 +1,29 @@
+version: "1.0"
+retailer: "sample_retailer"
+layout_version: "v1"
+
+encoding: "utf-8"
+
+parser:
+  reader:
+    type: delimited
+    delimiter: "|"
+
+  transaction:
+    start_record: "H"
+
+  records:
+    H:
+      role: HEADER
+    D:
+      role: DETAIL
+
+
+mapper:
+  HEADER:
+    store_id: 1
+
+  DETAIL:
+    upc: 1
+    units: 2
+    sales: 3
