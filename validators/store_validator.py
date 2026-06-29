@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
+from collections import defaultdict
 
 import polars as pl
 
-from parsers.mapper import SchemaRow
+from models.schema_row import SchemaRow
 from validators.base import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -13,51 +13,35 @@ logger = logging.getLogger(__name__)
 
 class StoreValidator(BaseValidator):
     """
-    Aggregates transaction counts per store using mapped schema data.
+    Aggregates transaction counts per store.
 
-    Requirements:
-    - Uses SchemaRow (not Transaction)
-    - Streaming aggregation
-    - Config-driven via Mapper
+    Assumes schema contains:
+    - store_id
+    - record_type = HEADER indicates new transaction
     """
 
     def __init__(self) -> None:
-        self._store_counts: Dict[str, int] = {}
+        self._store_counts: dict[str, int] = defaultdict(int)
 
-    def process(self, row: SchemaRow) -> None:  # ✅ CHANGED INPUT TYPE
-        """
-        Process a single SchemaRow.
-        """
-        if row.record_type != "HEADER":
+    def process(self, row: SchemaRow) -> None:
+        if row.values.get("record_type") != "HEADER":
             return
 
         store_id = row.values.get("store_id")
 
         if not store_id:
-            logger.warning(
-                "Missing store_id in row at line %s",
-                row.metadata_line_number,
-            )
+            logger.warning("Missing store_id at line %s", row.metadata.line_number)
             return
 
-        self._store_counts[store_id] = self._store_counts.get(store_id, 0) + 1
+        self._store_counts[store_id] += 1
 
     def finalize(self) -> None:
-        """No post-processing required."""
+        """No-op for this validator."""
         pass
 
     def generate_report(self) -> pl.DataFrame:
-        """
-        Return aggregated results as Polars DataFrame.
-        """
-
         if not self._store_counts:
-            return pl.DataFrame(
-                {
-                    "store_id": [],
-                    "transaction_count": [],
-                }
-            )
+            return pl.DataFrame({"store_id": [], "transaction_count": []})
 
         df = pl.DataFrame(
             {

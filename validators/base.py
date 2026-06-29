@@ -1,32 +1,29 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from models.schema_row import SchemaRow
 
 
 class BaseValidator(ABC):
     """
-    Generic validator interface.
+    Base contract for all validators.
 
-    Validators operate on streaming units (SchemaRow).
+    Validators must:
+    - Process streaming SchemaRow inputs
+    - Maintain only aggregated state
+    - Never store raw rows
     """
 
     @abstractmethod
-    def process(self, record: Any) -> None:
-        """
-        Process a single record.
-        """
+    def process(self, row: SchemaRow) -> None:
         raise NotImplementedError
 
     @abstractmethod
     def finalize(self) -> None:
-        """Finalize aggregation."""
         raise NotImplementedError
 
     @abstractmethod
     def generate_report(self) -> Any:
-        """Return final report."""
         raise NotImplementedError

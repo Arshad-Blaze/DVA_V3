@@ -1,42 +1,97 @@
----
+🧠 Overview
+DAV Framework v2 is a streaming retail POS processing framework designed to process files from 200MB to 60GB+ with constant memory usage.
 
-# ✅ `Architecture.md`
-
-```markdown
-# DAV Framework v2 Architecture
-
-## Pipeline
-
+🧱 System Architecture
+✅ Parser Pipeline
 Reader
-↓
-Detector
 ↓
 Tokenizer
 ↓
-Transaction Builder
+TransactionBuilder
 ↓
-Flattener
+SchemaMapper
 ↓
-Mapper
+SchemaRow (stream)
+
+
+✅ Validation Pipeline
+SchemaRow
 ↓
-Transaction
+ValidationManager
+↓
+Validators (parallel)
+↓
+Reports
 
-## Streaming Principle
 
-- Each transaction is processed and discarded
-- No large in-memory datasets
-- Validators maintain aggregates only
+🔁 Sequence Flow
+ParserService.parse(file)
+    ↓
+ParserEngine
+    ↓
+Reader → yields lines
+    ↓
+Tokenizer → yields tokens
+    ↓
+TransactionBuilder → yields Transaction
+    ↓
+SchemaMapper → yields SchemaRow
+    ↓
+ValidationManager → processes rows
 
-## Core Contracts
 
-### Parser
-- Emits Transaction objects only
-- No validation logic
+📦 Responsibility Separation
 
-### Validators
-- Stateless per transaction
-- Stateful aggregates only
+Component           Responsibility
+Reader              Raw file streaming
+Tokenizer           Line → structured token
+TransactionBuilder  Group tokens → Transaction
+SchemaMapper        Transaction → business schema
+Validator           Business rule processing
+ValidationManager   Dispatch & aggregation
 
-### Configuration
-- YAML-driven
-- No retailer-specific logic in code
+✅ Key Principles
+
+Streaming (O(1) memory)
+Config-driven (no retailer code)
+Strict separation of concerns
+Dependency Injection everywhere
+Fully testable units
+Immutable data objects
+
+
+🔒 Constraints
+
+No pandas
+No global state
+No cross-layer logic leakage
+Parser does NOT know validators
+Validators do NOT know parsing structure
+
+
+✅ ✅ OPTIONAL (Recommended)
+📁 Add Diagram Section (Minimal ASCII)
+          ┌─────────────┐
+          │  Reader     │
+          └─────┬───────┘
+                ↓
+          ┌─────────────┐
+          │ Tokenizer   │
+          └─────┬───────┘
+                ↓
+          ┌─────────────┐
+          │ Builder     │
+          └─────┬───────┘
+                ↓
+          ┌─────────────┐
+          │ Mapper      │
+          └─────┬───────┘
+                ↓
+          ┌─────────────┐
+          │ SchemaRow   │
+          └─────┬───────┘
+                ↓
+         ┌───────────────┐
+         │ Validators    │
+         └───────────────┘
+

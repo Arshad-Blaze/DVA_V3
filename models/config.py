@@ -8,10 +8,9 @@ from .enums import FileType, RecordRole
 
 @dataclass(frozen=True)
 class ReaderConfig:
-    """Reader configuration."""
-
     type: FileType
-    delimiter: Optional[str] = None
+    delimiter: str | None = None
+    encoding: str = "utf-8"   # ✅ REQUIRED
 
 
 @dataclass(frozen=True)
@@ -42,3 +41,10 @@ class ParserConfig:
         if record_code not in self.records:
             raise KeyError(f"Unknown record code: {record_code}")
         return self.records[record_code].role
+    
+@dataclass(frozen=True)
+class SystemConfig:
+    version: str
+    retailer: str
+    layout_version: str
+    encoding: str

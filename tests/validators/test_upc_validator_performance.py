@@ -1,4 +1,4 @@
-from validators.store_validator import StoreValidator
+from validators.upc_validator import UPCValidator
 from models.schema_row import SchemaRow
 from models.core import Metadata
 
@@ -6,8 +6,8 @@ from models.core import Metadata
 def _row(i: int) -> SchemaRow:
     return SchemaRow(
         values={
-            "store_id": f"S{i % 10}",
-            "record_type": "HEADER",
+            "record_type": "DETAIL",
+            "upc": f"UPC{i % 100}",  # 100 unique UPCs
         },
         metadata=Metadata.create(
             source_file="file",
@@ -19,12 +19,12 @@ def _row(i: int) -> SchemaRow:
 
 
 def test_large_stream() -> None:
-    validator = StoreValidator()
+    validator = UPCValidator()
 
-    for i in range(200_000):  # ✅ bigger load
+    for i in range(200_000):
         validator.process(_row(i))
 
     validator.finalize()
     df = validator.generate_report()
 
-    assert df.shape[0] == 10
+    assert df.shape[0] == 100

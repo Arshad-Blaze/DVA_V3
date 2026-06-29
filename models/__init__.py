@@ -4,6 +4,7 @@ from .chunk import ChunkMetadata
 from .config import ParserConfig, ReaderConfig, RecordDefinition, TransactionConfig
 from .core import Detail, Header, Metadata, Payment, Trailer, Transaction
 from .enums import FileType, RecordRole
+from .schema_row import SchemaRow
 
 __all__ = [
     "ChunkMetadata",

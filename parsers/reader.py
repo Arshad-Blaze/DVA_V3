@@ -27,32 +27,28 @@ class Reader(ABC):
 
 
 class DelimitedReader(Reader):
-    """
-    Reader for delimited files.
+    def __init__(self, file_path: Path, encoding: str = "utf-8") -> None:
+        super().__init__(file_path)
+        self.encoding = encoding
 
-    Does not parse — only yields raw lines.
-    """
-
-    def read(self) -> Generator[str, None, None]:
-        logger.info("Starting delimited file read: %s", self.file_path)
-
-        with self.file_path.open("r", encoding="utf-8") as file:
-            for line_number, line in enumerate(file, start=1):
+    def read(self):
+        with self.file_path.open("r", encoding=self.encoding) as f:
+            for line in f:
                 yield line.rstrip("\n")
 
 
 class FixedWidthReader(Reader):
     """
     Reader for fixed-width files.
-
-    Yields raw lines without interpretation.
     """
 
-    def read(self) -> Generator[str, None, None]:
-        logger.info("Starting fixed-width file read: %s", self.file_path)
+    def __init__(self, file_path: Path, encoding: str = "utf-8") -> None:
+        super().__init__(file_path)
+        self.encoding = encoding
 
-        with self.file_path.open("r", encoding="utf-8") as file:
-            for line_number, line in enumerate(file, start=1):
+    def read(self):
+        with self.file_path.open("r", encoding=self.encoding) as file:
+            for line in file:
                 yield line.rstrip("\n")
 
 
@@ -94,19 +90,14 @@ class ChunkedReaderWrapper:
 
 
 class ReaderFactory:
-    """
-    Factory for creating reader instances.
-    """
-
     @staticmethod
     def create(file_path: Path, config: ReaderConfig) -> Reader:
-        """
-        Create appropriate reader based on configuration.
-        """
+        encoding = getattr(config, "encoding", "utf-8")
+
         if config.type == FileType.DELIMITED:
-            return DelimitedReader(file_path)
+            return DelimitedReader(file_path, encoding)
 
         if config.type == FileType.FIXED_WIDTH:
-            return FixedWidthReader(file_path)
+            return FixedWidthReader(file_path, encoding)
 
-        raise ValueError(f"Unsupported reader type: {config.type}")
+        raise ValueError("Unsupported reader")
