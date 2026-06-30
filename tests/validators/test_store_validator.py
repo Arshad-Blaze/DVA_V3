@@ -1,50 +1,39 @@
+import polars as pl
 from validators.store_validator import StoreValidator
 from models.schema_row import SchemaRow
 from models.core import Metadata
 
 
-def _row(store_id: str, record_type: str) -> SchemaRow:
+def _row(store, units, sales):
     return SchemaRow(
-        values={
-            "store_id": store_id,
-            "record_type": record_type,
-        },
-        metadata=Metadata.create(
-            source_file="file",
-            line_number=1,
-            transaction_number=1,
-            record_number=1,
-        ),
+        values={"store_id": store, "units": units, "sales": sales},
+        metadata=Metadata.create("f", 1, 1, 1),
     )
 
 
-def test_store_counts() -> None:
-    validator = StoreValidator()
+def test_store_compare():
+    v = StoreValidator()
 
-    rows = [
-        _row("S1", "HEADER"),
-        _row("S1", "HEADER"),
-        _row("S2", "HEADER"),
-        _row("S2", "DETAIL"),  # ignored
-    ]
+    v.set_mode("bau")
+    v.process(_row("S1", 2, 10))
 
-    for r in rows:
-        validator.process(r)
+    v.set_mode("test")
+    v.process(_row("S1", 4, 20))
 
-    validator.finalize()
-    df = validator.generate_report()
+    df = v.generate_result().report_data
 
-    result = dict(zip(df["store_id"], df["transaction_count"]))
+    assert df.shape[0] == 1
 
-    assert result["S1"] == 2
-    assert result["S2"] == 1
+def test_store():
 
+    v = StoreValidator()
 
-def test_missing_store() -> None:
-    validator = StoreValidator()
+    v.set_mode("bau")
+    v.process(SchemaRow(values={"store_id": "S1", "units": 10, "sales": 100}, metadata=None))
 
-    row = _row("", "HEADER")  # missing store
-    validator.process(row)
+    v.set_mode("test")
+    v.process(SchemaRow(values={"store_id": "S1", "units": 5, "sales": 50}, metadata=None))
 
-    df = validator.generate_report()
-    assert df.shape[0] == 0
+    df = v.generate_result().report_data
+
+    assert df["unit_diff"][0] == 5

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import polars as pl
 
 from models import (
     Detail,
@@ -9,25 +10,31 @@ from models import (
     Transaction,
 )
 from validators import BaseValidator, ValidatorManager
+from models.validation_result import ValidationResult
 
 
 @dataclass
 class CountValidator(BaseValidator):
-    """
-    Simple validator used for testing.
 
-    Counts number of transactions.
-    """
+    def __init__(self):
+        self.count = 0
 
-    count: int = 0
-
-    def process(self, transaction: Transaction) -> None:
+    def process(self, row):
         self.count += 1
 
-    def finalize(self) -> None:
+    def finalize(self):
         pass
 
-    def generate_report(self) -> int:
+    def generate_result(self) -> ValidationResult:
+        return ValidationResult(
+            validator_name="CountValidator",
+            status="SUCCESS",
+            summary={"count": self.count},
+            report_data=None,  # ✅ important
+        )
+
+    # ✅ OVERRIDE compatibility
+    def generate_report(self):
         return self.count
 
 

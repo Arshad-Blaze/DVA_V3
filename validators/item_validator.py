@@ -1,105 +1,76 @@
-from __future__ import annotations
-
-import logging
 from collections import defaultdict
-
 import polars as pl
 
-from models.schema_row import SchemaRow
 from validators.base import BaseValidator
-
-logger = logging.getLogger(__name__)
+from models.validation_result import ValidationResult
 
 
 class ItemValidator(BaseValidator):
-    """
-    Aggregates item-level metrics per UPC.
 
-    Features:
-    - Total units per UPC
-    - Total sales per UPC
-    - Average price validation
-    """
+    def __init__(self):
+        self._bau = defaultdict(lambda: {"units": 0.0, "sales": 0.0})
+        self._test = defaultdict(lambda: {"units": 0.0, "sales": 0.0})
+        self._mode = "bau"
 
-    def __init__(self) -> None:
-        self._units: dict[str, float] = defaultdict(float)
-        self._sales: dict[str, float] = defaultdict(float)
-        self._invalid_rows: int = 0
-        self._total_rows: int = 0
+    def set_mode(self, mode):
+        self._mode = mode
 
-    def process(self, row: SchemaRow) -> None:
-        """
-        Process each row (DETAIL only).
-        """
-        if row.values.get("record_type") != "DETAIL":
+    def process(self, row):
+        upc = row.get("upc")
+        desc = row.get("description") or ""
+
+        if upc is None:
             return
 
-        self._total_rows += 1
+        key = f"{upc}|{desc}"
 
-        upc = row.values.get("upc")
-        units = row.values.get("units")
-        sales = row.values.get("sales")
+        units = float(row.get("units") or 0)
+        sales = float(row.get("sales") or 0)
 
-        if not upc or units is None or sales is None:
-            self._invalid_rows += 1
-            return
-
-        try:
-            units_val = float(units)
-            sales_val = float(sales)
-        except ValueError:
-            logger.debug(
-                "Invalid numeric data at line %s",
-                row.metadata.line_number,
-            )
-            self._invalid_rows += 1
-            return
-
-        self._units[upc] += units_val
-        self._sales[upc] += sales_val
-
-    def finalize(self) -> None:
-        """No additional processing."""
+        if self._mode == "bau":
+            self._bau[key]["units"] += units
+            self._bau[key]["sales"] += sales
+        else:
+            self._test[key]["units"] += units
+            self._test[key]["sales"] += sales
+    
+    def finalize(self):
         pass
 
-    def generate_report(self) -> pl.DataFrame:
-        """
-        Generate item-level aggregation report.
-        """
-        if not self._units:
-            return pl.DataFrame(
-                {
-                    "upc": [],
-                    "total_units": [],
-                    "total_sales": [],
-                    "avg_price": [],
-                }
-            )
+    def generate_result(self):
 
-        upcs = list(self._units.keys())
+        rows = []
 
-        df = pl.DataFrame(
-            {
-                "upc": upcs,
-                "total_units": [self._units[u] for u in upcs],
-                "total_sales": [self._sales[u] for u in upcs],
-            }
+        for k in set(self._bau) | set(self._test):
+            bu = self._bau.get(k, {"units": 0, "sales": 0})
+            te = self._test.get(k, {"units": 0, "sales": 0})
+
+            unit_diff = bu["units"] - te["units"]
+            sales_diff = bu["sales"] - te["sales"]
+
+            unit_pct = (-100 if te["units"] > 0 else 0) if bu["units"] == 0 \
+                else (unit_diff / bu["units"] * 100)
+
+            sales_pct = (-100 if te["sales"] > 0 else 0) if bu["sales"] == 0 \
+                else (sales_diff / bu["sales"] * 100)
+
+            upc, desc = k.split("|", 1)
+
+            rows.append({
+                "upc": upc,
+                "description": desc,
+                "bau_units": round(bu["units"], 3),
+                "test_units": round(te["units"], 3),
+                "unit_diff": round(unit_diff, 3),
+                "unit_diff_pct": round(unit_pct, 3),
+                "bau_sales": round(bu["sales"], 3),
+                "test_sales": round(te["sales"], 3),
+                "sales_diff": round(sales_diff, 3),
+                "sales_diff_pct": round(sales_pct, 3),
+            })
+
+        return ValidationResult(
+            validator_name="ItemValidator",
+            status="SUCCESS",
+            report_data=pl.DataFrame(rows),
         )
-
-        df = df.with_columns(
-            (
-                pl.when(pl.col("total_units") > 0)
-                .then(pl.col("total_sales") / pl.col("total_units"))
-                .otherwise(0.0)
-                .alias("avg_price")
-            )
-        )
-
-        return df.lazy().collect()
-
-    def summary(self) -> dict:
-        return {
-            "total_rows": self._total_rows,
-            "invalid_rows": self._invalid_rows,
-            "unique_items": len(self._units),
-        }

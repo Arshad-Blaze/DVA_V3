@@ -1,29 +1,29 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from models.schema_row import SchemaRow
+from models.validation_result import ValidationResult
 
 
 class BaseValidator(ABC):
-    """
-    Base contract for all validators.
-
-    Validators must:
-    - Process streaming SchemaRow inputs
-    - Maintain only aggregated state
-    - Never store raw rows
-    """
 
     @abstractmethod
     def process(self, row: SchemaRow) -> None:
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def finalize(self) -> None:
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def generate_report(self) -> Any:
-        raise NotImplementedError
+    def generate_result(self) -> ValidationResult:
+        pass
+
+    # ✅ BACKWARD COMPATIBILITY
+    def generate_report(self):
+        """
+        Temporary compatibility for existing tests.
+        """
+        result = self.generate_result()
+        return result.report_data

@@ -1,80 +1,77 @@
-from __future__ import annotations
-
-import logging
-from collections import defaultdict
-
 import polars as pl
-
-from models.schema_row import SchemaRow
-from validators.base import BaseValidator
-
-logger = logging.getLogger(__name__)
+from models.validation_result import ValidationResult
 
 
-class MissingStoreValidator(BaseValidator):
-    """
-    Detects missing store_id occurrences.
+class MissingStoreValidator:
 
-    Aggregates:
-    - total missing store_id count
-    - record-type level breakdown
-    """
+    def __init__(self):
+        self._bau = set()
+        self._test = set()
+        self._reference = set()
+        self._mode = "bau"
+        self._mode_type = "existing"
 
-    def __init__(self) -> None:
-        self._missing_count: int = 0
-        self._by_record_type: dict[str, int] = defaultdict(int)
-        self._total_rows: int = 0
+    def set_mode(self, mode):
+        self._mode = mode
 
-    def process(self, row: SchemaRow) -> None:
-        """
-        Process a single SchemaRow.
-        """
-        self._total_rows += 1
+    def set_reference_stores(self, stores):
+        self._reference = set(stores)
+        self._mode_type = "onboarding"
 
-        store_id = row.values.get("store_id")
+    def process(self, row):
+        s = row.get("store_id")
+        if s:
+            if self._mode == "bau":
+                self._bau.add(s)
+            else:
+                self._test.add(s)
 
-        if store_id:
-            return
-
-        self._missing_count += 1
-
-        record_type = row.values.get("record_type", "UNKNOWN")
-        self._by_record_type[record_type] += 1
-
-        logger.debug(
-            "Missing store_id at line=%s record_type=%s",
-            row.metadata.line_number,
-            record_type,
-        )
-
-    def finalize(self) -> None:
-        """No additional processing required."""
+    def finalize(self):
         pass
 
-    def generate_report(self) -> pl.DataFrame:
-        """
-        Returns breakdown of missing store_id by record type.
-        """
+    def generate_result(self):
 
-        if not self._by_record_type:
-            return pl.DataFrame(
-                {"record_type": [], "missing_count": []}
+        # ✅ onboarding
+        if self._mode_type == "onboarding":
+            missing = self._reference - self._bau
+
+            return ValidationResult(
+                validator_name="MissingStoreValidator",
+                status="SUCCESS",
+                summary={
+                    "missing_stores": len(missing),
+                },
+                report_data=pl.DataFrame({
+                    "store": list(missing)
+                })
             )
 
-        df = pl.DataFrame(
-            {
-                "record_type": list(self._by_record_type.keys()),
-                "missing_count": list(self._by_record_type.values()),
-            }
+        # ✅ existing
+        missing = self._bau - self._test
+        additional = self._test - self._bau
+
+        rows = []
+        for s in self._bau | self._test:
+            if s in missing:
+                st = "MISSING"
+            elif s in additional:
+                st = "NEW"
+            else:
+                st = "MATCHED"
+            rows.append({"store": s, "status": st})
+
+        return ValidationResult(
+            validator_name="MissingStoreValidator",
+            status="SUCCESS",
+            summary={
+                "total_stores_bau": len(self._bau),
+                "total_stores_test": len(self._test),
+                "missing": len(missing),
+                "additional": len(additional),
+            },
+            report_data=pl.DataFrame(rows)
         )
-
-        return df.lazy().collect()
-
-    def summary(self) -> dict:
-        """
-        High-level summary.
-        """
-        return {
-            "total_rows": self._total_rows,
-            "missing_store_id": self._missing_count,
-        }
+    
+    def generate_report(self):
+        result = self.generate_result()
+        return result.report_data

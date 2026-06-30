@@ -1,9 +1,11 @@
+import polars as pl
+
 from validators.missing_store_validator import MissingStoreValidator
 from models.schema_row import SchemaRow
 from models.core import Metadata
 
 
-def _row(store_id: str | None, record_type: str) -> SchemaRow:
+def _row(store_id: str, record_type: str) -> SchemaRow:
     return SchemaRow(
         values={
             "store_id": store_id,
@@ -18,48 +20,46 @@ def _row(store_id: str | None, record_type: str) -> SchemaRow:
     )
 
 
-def test_missing_store_detection() -> None:
-    validator = MissingStoreValidator()
+def test_store_comparison():
+    v = MissingStoreValidator()
 
-    rows = [
-        _row(None, "HEADER"),
-        _row("", "DETAIL"),
-        _row("S1", "DETAIL"),
-    ]
+    v.set_mode("bau")
+    v.process(_row("S1", "HEADER"))
+    v.process(_row("S2", "HEADER"))
 
-    for r in rows:
-        validator.process(r)
+    v.set_mode("test")
+    v.process(_row("S1", "HEADER"))
+    v.process(_row("S3", "HEADER"))
 
-    summary = validator.summary()
+    df = v.generate_result().report_data
 
-    assert summary["missing_store_id"] == 2
-
-
-def test_grouping_by_record_type() -> None:
-    validator = MissingStoreValidator()
-
-    rows = [
-        _row(None, "HEADER"),
-        _row(None, "HEADER"),
-        _row(None, "DETAIL"),
-    ]
-
-    for r in rows:
-        validator.process(r)
-
-    df = validator.generate_report()
-
-    result = dict(zip(df["record_type"], df["missing_count"]))
-
-    assert result["HEADER"] == 2
-    assert result["DETAIL"] == 1
+    assert df.shape[0] == 3
 
 
-def test_no_missing() -> None:
-    validator = MissingStoreValidator()
+def test_large_stream():
+    v = MissingStoreValidator()
 
-    validator.process(_row("S1", "HEADER"))
+    v.set_mode("bau")
+    for i in range(100_000):
+        v.process(_row(f"S{i%1000}", "HEADER"))
 
-    df = validator.generate_report()
+    v.set_mode("test")
+    for i in range(100_000):
+        v.process(_row(f"S{i%1200}", "HEADER"))
 
-    assert df.shape[0] == 0
+    result = v.generate_result()
+
+    assert result.summary["total_stores_bau"] == 1000
+
+def test_missing():
+    v = MissingStoreValidator()
+
+    v.set_mode("bau")
+    v.process({"store_id": "S1"})
+
+    v.set_mode("test")
+    v.process({"store_id": "S2"})
+
+    res = v.generate_result()
+
+    assert res.summary["missing"] == 1
