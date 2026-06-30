@@ -8,11 +8,8 @@ from .core import Metadata
 
 @dataclass(frozen=True)
 class SchemaRow:
-    """
-    Normalized business row.
-
-    Validators consume this instead of Transactions.
-    """
-
-    values: Dict[str, str]
+    values: dict
     metadata: Metadata
+
+    def get(self, key: str, default=None):
+        return self.values.get(key, default)
